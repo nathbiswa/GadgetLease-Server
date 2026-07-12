@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import { createRemoteJWKSet, jwtVerify } from 'jose'; // ➔ jose লাইব্রেরি
-import Gadget = require('./models/Gadget');
+import Gadget  from './models/Gadget';
 
 dotenv.config();
 
@@ -82,25 +82,44 @@ app.post('/api/gadgets', verifyToken, (req: AuthenticatedRequest, res: Response)
 
 // ====================== All Gadgets ======================
 // 🌐 ১. সব গ্যাজেট পাওয়ার এপিআই (All Gadgets)
-app.get('/api/gadgets', async (req: Request, res: Response): Promise<any> => {
+app.get('/api/gadgets', async (req, res): Promise<any> => {
   try {
     const gadgets = await Gadget.find(); // ডাটাবেজ থেকে সব ডাটা খুঁজে আনবে
     res.json({ success: true, data: gadgets });
   } catch (error) {
     console.error("Error fetching gadgets:", error);
-    res.status(500).json({ success: false, message: "গ্যাজেট ডাটা আনতে সমস্যা হয়েছে।" });
+    res.status(500).json({ success: false, message: "There was a problem fetching gadget data." });
   }
 });
 
 // 🌐 ২. শুধু ফিচারড গ্যাজেট পাওয়ার এপিআই (Featured Rental Gear)
-app.get('/api/gadgets/featured', async (req: Request, res: Response): Promise<any> => {
+app.get('/api/gadgets/featured', async (req, res): Promise<any> => {
   try {
     // শুধু যেগুলোর featured মান true, সেগুলো আনবে
     const featuredGadgets = await Gadget.find({ featured: true }); 
     res.json({ success: true, data: featuredGadgets });
   } catch (error) {
     console.error("Error fetching featured gadgets:", error);
-    res.status(500).json({ success: false, message: "ফিচারড ডাটা আনতে সমস্যা হয়েছে।" });
+    res.status(500).json({ success: false, message: "There was a problem fetching featured gadget data." });
+  }
+});
+
+// 🌐 ৩. আইডি দিয়ে নির্দিষ্ট একটি গ্যাজেটের ডিটেইলস পাওয়ার এপিআই
+app.get('/api/gadgets/:id', async (req, res): Promise<any> => {
+  try {
+    const { id } = req.params;
+    
+    // ডাটাবেজ থেকে আইডি ম্যাচ করে গ্যাজেট খুঁজবে
+    const gadget = await Gadget.findById(id); 
+    
+    if (!gadget) {
+      return res.status(404).json({ success: false, message: "The gadget was not found." });
+    }
+    
+    res.json({ success: true, data: gadget });
+  } catch (error) {
+    console.error("Error fetching single gadget:", error);
+    res.status(500).json({ success: false, message: "There was a problem fetching the gadget data." });
   }
 });
 
