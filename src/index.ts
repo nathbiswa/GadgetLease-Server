@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import { createRemoteJWKSet, jwtVerify } from 'jose'; // ➔ jose লাইব্রেরি
 import Gadget  from './models/Gadget';
+import Booking from './models/Booking';
 
 dotenv.config();
 
@@ -81,14 +82,68 @@ app.post('/api/gadgets', verifyToken, (req: AuthenticatedRequest, res: Response)
 });
 
 // ====================== All Gadgets ======================
-// 🌐 ১. সব গ্যাজেট পাওয়ার এপিআই (All Gadgets)
-app.get('/api/gadgets', async (req, res): Promise<any> => {
+// 🌐 ১. সব গ্যাজেট পাওয়ার এপিআই (Advanced Search, Filter, Sort, Pagination)
+app.get('/api/gadgets', async (req: Request, res: Response): Promise<any> => {
   try {
-    const gadgets = await Gadget.find(); // ডাটাবেজ থেকে সব ডাটা খুঁজে আনবে
-    res.json({ success: true, data: gadgets });
+    const { search, category, maxPrice, location, sortBy, order, page, limit } = req.query;
+
+    // ১. ফিল্টারিং অবজেক্ট তৈরি (Query Object)
+    const query: any = {};
+
+    // 🔍 সার্চ ফিল্টার (নাম বা ডেসক্রিপশনে খুঁজবে)
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { shortDescription: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // 📁 ক্যাটাগরি ফিল্টার
+    if (category) {
+      query.category = category;
+    }
+
+    // 💰 সর্বোচ্চ প্রাইস ফিল্টার
+    if (maxPrice) {
+      query.pricePerDay = { $lte: Number(maxPrice) };
+    }
+
+    // 📍 লোকেশন ফিল্টার
+    if (location) {
+      query.location = { $regex: location, $options: 'i' };
+    }
+
+    // ২. সর্টিং লজিক (Sorting)
+    const sortField = (sortBy as string) || 'createdAt'; // ডিফল্ট তৈরি হওয়ার সময় অনুযায়ী
+    const sortOrder = (order as string) === 'desc' ? -1 : 1; // asc বা desc
+    const sortOptions: any = { [sortField]: sortOrder };
+
+    // ৩. পেজিনেশন লজিক (Pagination)
+    const pageNumber = Number(page) || 1;
+    const limitNumber = Number(limit) || 8; // প্রতি পেজে ৮টি করে ডাটা দেখাবে
+    const skip = (pageNumber - 1) * limitNumber;
+
+    // ডাটাবেজ থেকে ডাটা এবং মোট সংখ্যা আনা
+    const totalGadgets = await Gadget.countDocuments(query);
+    const gadgets = await Gadget.find(query)
+      .sort(sortOptions)
+      .skip(skip)
+      .limit(limitNumber);
+
+    // রেসপন্স পাঠানো
+    res.json({
+      success: true,
+      meta: {
+        total: totalGadgets,
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: Math.ceil(totalGadgets / limitNumber)
+      },
+      data: gadgets
+    });
   } catch (error) {
     console.error("Error fetching gadgets:", error);
-    res.status(500).json({ success: false, message: "There was a problem fetching gadget data." });
+    res.status(500).json({ success: false, message: "গ্যাজেট ডাটা ফিল্টার করতে সমস্যা হয়েছে।" });
   }
 });
 
@@ -120,6 +175,152 @@ app.get('/api/gadgets/:id', async (req, res): Promise<any> => {
   } catch (error) {
     console.error("Error fetching single gadget:", error);
     res.status(500).json({ success: false, message: "There was a problem fetching the gadget data." });
+  }
+});
+
+// ====================== All Bookings ======================
+// 🌐 ৪. নতুন লিজ/বুকিং তৈরি করার এপিআই
+app.post('/api/bookings', async (req, res): Promise<any> => {
+  try {
+    const { gadgetId, userId, userEmail, startDate, endDate, totalCost } = req.body;
+
+    // 🔍 ডিবাগিং: সার্ভার টার্মিনালে ডাটা আসছে কিনা তা দেখার জন্য
+    // console.log("Received Booking Data:", req.body);
+
+    // ভ্যালিডেশন চেক (এখানে আমরা নিশ্চিত করছি যেন সব ডেটা থাকে)
+    if (!gadgetId || !userId || !userEmail || !startDate || !endDate || !totalCost) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Necessary booking data is missing. Please provide all required fields."
+      });
+    }
+
+    // নতুন বুকিং ডকুমেন্ট তৈরি
+    const newBooking = new Booking({
+      gadgetId, // এটি মঙ্গোডিবি ও মঙ্গুজ অবজেক্ট আইডি হিসেবে রিড করবে
+      userId,
+      userEmail,
+      startDate,
+      endDate,
+      totalCost: Number(totalCost), // নাম্বার নিশ্চিত করা হলো
+      status: 'confirmed'
+    });
+
+    await newBooking.save();
+
+    res.status(201).json({
+      success: true,
+      message: "Gadget Lease Booking Created Successfully!",
+      data: newBooking
+    });
+  } catch (error) {
+    console.error("Error creating booking:", error);
+    res.status(500).json({ success: false, message: "Problem creating booking." });
+  }
+});
+
+// 🌐 ৫. নির্দিষ্ট ইউজারের সব বুকিং হিস্ট্রি পাওয়ার এপিআই (Dashboard)
+app.get('/api/bookings/user/:userId', async (req, res): Promise<any> => {
+  try {
+    const { userId } = req.params;
+
+    // ১. ডাটাবেজ থেকে ওই ইউজারের বুকিং খোঁজা হচ্ছে
+    // ২. populate('gadgetId') দিয়ে Gadget কালেকশন থেকে ডাটা অটো জয়েন করা হচ্ছে
+    const userBookings = await Booking.find({ userId })
+      .populate('gadgetId') 
+      .sort({ createdAt: -1 }); // সর্বশেষ বুকিং আগে দেখাবে
+
+    res.json({
+      success: true,
+      data: userBookings
+    });
+  } catch (error) {
+    console.error("Error fetching user bookings:", error);
+    res.status(500).json({ success: false, message: "Error fetching user bookings." });
+  }
+});
+
+// ====================== Admin Routes ======================
+// 🌐 ফিক্সড করা এপিআই (আপনার আগের কোডটির পরিবর্তে এটি বসান)
+app.get('/api/admin/bookings', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { userId } = req.query; 
+
+    if (!userId) {
+      return res.status(400).json({ success: false, message: "User ID is missing." });
+    }
+
+    // ১. মঙ্গুজের ডাইনামিক কানেকশন থেকে সরাসরি 'user' বা 'users' কালেকশন ধরা হচ্ছে
+    const db = mongoose.connection.db;
+    const { ObjectId } = require('mongoose').Types;
+    
+    if (!ObjectId.isValid(userId)) {
+        return res.status(400).json({ success: false, message: "Invalid User ID." });
+    }
+
+    // Better Auth মঙ্গোডিবিতে যে কালেকশনই বানাক না কেন, এটি ডাটা খুঁজে বের করবেই
+    const user = await db.collection('user').findOne({ _id: new ObjectId(userId as string) }) 
+               || await db.collection('users').findOne({ _id: new ObjectId(userId as string) });
+
+    // ২. 🔒 রোল চেকিং
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Access Denied! You are not an admin of this platform." 
+      });
+    }
+
+    // ৩. অ্যাডমিন ভেরিফাইড হলে সব বুকিং নিয়ে আসা
+    const allBookings = await Booking.find()
+      .populate('gadgetId')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: allBookings
+    });
+  } catch (error) {
+    console.error("Express Admin Fetch Error:", error);
+    res.status(500).json({ success: false, message: "Admin login failed. Please try again." });
+  }
+});
+
+
+// Admin Gadget Management API (CRUD Operations)
+// 🌐 ৭. অ্যাডমিন প্যানেল থেকে নতুন গ্যাজেট যুক্ত করার API
+app.post('/api/admin/gadgets', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { title, category, pricePerDay, shortDescription, fullDescription, images, location, availableDate, rating, specifications } = req.body;
+
+    // সিম্পল ফিল্ড ভ্যালিডেশন
+    if (!title || !category || !pricePerDay || !shortDescription) {
+      return res.status(400).json({ success: false, message: "প্রয়োজনীয় মূল তথ্যগুলো (Title, Category, Price) অবশ্যই দিতে হবে।" });
+    }
+
+    // নতুন গ্যাজেট অবজেক্ট তৈরি
+    const newGadget = new Gadget({
+      title,
+      category,
+      pricePerDay: Number(pricePerDay),
+      shortDescription,
+      fullDescription: fullDescription || shortDescription,
+      images: images && images.length > 0 ? images : ['https://placehold.co/600x400'],
+      location: location || 'Dhaka, Bangladesh',
+      availableDate: availableDate || new Date().toISOString().split('T')[0],
+      rating: Number(rating) || 5.0,
+      specifications: specifications || []
+    });
+
+    await newGadget.save();
+
+    res.status(201).json({
+      success: true,
+      message: "🎉 নতুন গ্যাজেটটি সফলভাবে প্ল্যাটফর্মে যুক্ত হয়েছে!",
+      data: newGadget
+    });
+  } catch (error) {
+    console.error("Error creating gadget:", error);
+    res.status(500).json({ success: false, message: "গ্যাজেটটি যুক্ত করতে সার্ভারে সমস্যা হয়েছে।" });
   }
 });
 
