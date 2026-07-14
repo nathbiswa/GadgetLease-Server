@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts"
+    "start": "node index.ts",
+    "dev": "nodemon index.ts",
+    "build": "echo 'No build step required for Express backend'"
   },
   "keywords": [],
   "author": "",
