@@ -1,14 +1,14 @@
-import express, { Express, Request, Response, NextFunction } from 'express';
+import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose, { Types } from 'mongoose'; // ➔ Types ইম্পোর্ট করা হলো
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import Gadget from './models/Gadget';
-import Booking from './models/Booking';
+import Gadget from './models/Gadget.js'; 
+import Booking from './models/Booking.js';
 
 dotenv.config();
 
-const app: Express = express();
+const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI;
 
@@ -37,11 +37,7 @@ const JWKS = createRemoteJWKSet(
   new URL(`${process.env.CLIENT_URL || 'http://localhost:3000'}/api/auth/jwks`)
 );
 
-interface AuthenticatedRequest extends Request {
-  user?: any;
-}
-
-const verifyToken = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+const verifyToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -65,7 +61,7 @@ const verifyToken = async (req: AuthenticatedRequest, res: Response, next: NextF
 // ==========================================
 // 🎯 PROTECTED ROUTE EXAMPLE
 // ==========================================
-app.post('/api/gadgets', verifyToken, (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/gadgets/verify', verifyToken, (req, res) => {
   res.json({ 
     success: true, 
     message: "JWKS ভেরিফিকেশন সফল হয়েছে! 🎉",
@@ -74,11 +70,11 @@ app.post('/api/gadgets', verifyToken, (req: AuthenticatedRequest, res: Response)
 });
 
 // ====================== All Gadgets ======================
-app.get('/api/gadgets', async (req: Request, res: Response): Promise<any> => {
+app.get('/api/gadgets', async (req, res) => {
   try {
     const { search, category, maxPrice, location, sortBy, order, page, limit } = req.query;
 
-    const query: any = {};
+    const query = {};
     query.status = 'approved';
 
     if (search) {
@@ -100,9 +96,9 @@ app.get('/api/gadgets', async (req: Request, res: Response): Promise<any> => {
       query.location = { $regex: location, $options: 'i' };
     }
 
-    const sortField = (sortBy as string) || 'createdAt';
-    const sortOrder = (order as string) === 'desc' ? -1 : 1;
-    const sortOptions: any = { [sortField]: sortOrder };
+    const sortField = sortBy || 'createdAt';
+    const sortOrder = order === 'desc' ? -1 : 1;
+    const sortOptions = { [sortField]: sortOrder };
 
     const pageNumber = Number(page) || 1;
     const limitNumber = Number(limit) || 8;
@@ -130,7 +126,7 @@ app.get('/api/gadgets', async (req: Request, res: Response): Promise<any> => {
   }
 });
 
-app.get('/api/gadgets/featured', async (req, res): Promise<any> => {
+app.get('/api/gadgets/featured', async (req, res) => {
   try {
     const featuredGadgets = await Gadget.find({ featured: true }); 
     res.json({ success: true, data: featuredGadgets });
@@ -140,7 +136,7 @@ app.get('/api/gadgets/featured', async (req, res): Promise<any> => {
   }
 });
 
-app.get('/api/gadgets/:id', async (req, res): Promise<any> => {
+app.get('/api/gadgets/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const gadget = await Gadget.findById(id); 
@@ -156,7 +152,7 @@ app.get('/api/gadgets/:id', async (req, res): Promise<any> => {
 });
 
 // ====================== All Bookings ======================
-app.post('/api/bookings', async (req, res): Promise<any> => {
+app.post('/api/bookings', async (req, res) => {
   try {
     const { gadgetId, userId, userEmail, startDate, endDate, totalCost } = req.body;
 
@@ -190,7 +186,7 @@ app.post('/api/bookings', async (req, res): Promise<any> => {
   }
 });
 
-app.get('/api/bookings/user/:userId', async (req, res): Promise<any> => {
+app.get('/api/bookings/user/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     const userBookings = await Booking.find({ userId })
@@ -207,7 +203,7 @@ app.get('/api/bookings/user/:userId', async (req, res): Promise<any> => {
   }
 });
 
-app.post('/api/items/add', verifyToken, async (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/items/add', verifyToken, async (req, res) => {
   try {
     console.log("📥 Incoming Payload:", req.body);
     const { title, category, pricePerDay, shortDescription, fullDescription, images, location, availableDate, userId } = req.body;
@@ -243,7 +239,7 @@ app.post('/api/items/add', verifyToken, async (req: AuthenticatedRequest, res: R
       data: newGadget 
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error("❌ Mongoose Save Error Details:", error); 
     return res.status(500).json({ 
       success: false, 
@@ -253,7 +249,7 @@ app.post('/api/items/add', verifyToken, async (req: AuthenticatedRequest, res: R
   }
 });
 
-app.get('/api/user/my-items', async (req: Request, res: Response) => {
+app.get('/api/user/my-items', async (req, res) => {
   try {
     const { userId } = req.query;
     const myItems = await Gadget.find({ addedBy: userId }).sort({ createdAt: -1 });
@@ -263,7 +259,7 @@ app.get('/api/user/my-items', async (req: Request, res: Response) => {
   }
 });
 
-app.delete('/api/gadgets/:id', verifyToken, async (req: AuthenticatedRequest, res: Response) => {
+app.delete('/api/gadgets/:id', verifyToken, async (req, res) => {
   try {
     await Gadget.findByIdAndDelete(req.params.id);
     res.status(200).json({ success: true, message: "Deleted successfully" });
@@ -273,7 +269,7 @@ app.delete('/api/gadgets/:id', verifyToken, async (req: AuthenticatedRequest, re
 });
 
 // ====================== Admin Routes ======================
-app.get('/api/admin/bookings', async (req: Request, res: Response): Promise<any> => {
+app.get('/api/admin/bookings', async (req, res) => {
   try {
     const { userId } = req.query; 
 
@@ -286,11 +282,11 @@ app.get('/api/admin/bookings', async (req: Request, res: Response): Promise<any>
       return res.status(500).json({ success: false, message: "Database connection not ready yet." });
     }
     
-    if (!Types.ObjectId.isValid(userId as string)) {
+    if (!Types.ObjectId.isValid(userId)) {
         return res.status(400).json({ success: false, message: "Invalid User ID." });
     }
 
-    const targetId = new Types.ObjectId(userId as string); // 🎯 Types.ObjectId ব্যবহার করা হলো
+    const targetId = new Types.ObjectId(userId); 
 
     const user = await db.collection('user').findOne({ _id: targetId }) 
                || await db.collection('users').findOne({ _id: targetId });
@@ -316,7 +312,7 @@ app.get('/api/admin/bookings', async (req: Request, res: Response): Promise<any>
   }
 });
 
-app.post('/api/admin/gadgets', async (req: Request, res: Response): Promise<any> => {
+app.post('/api/admin/gadgets', async (req, res) => {
   try {
     const { title, category, pricePerDay, shortDescription, fullDescription, images, location, availableDate, rating, specifications } = req.body;
 
@@ -350,7 +346,7 @@ app.post('/api/admin/gadgets', async (req: Request, res: Response): Promise<any>
   }
 });
 
-app.get('/api/admin/pending-gadgets', async (req: Request, res: Response): Promise<any> => {
+app.get('/api/admin/pending-gadgets', async (req, res) => {
   try {
     const pendingGadgets = await Gadget.find({ status: 'pending' }).sort({ createdAt: -1 });
     res.status(200).json({
@@ -364,7 +360,7 @@ app.get('/api/admin/pending-gadgets', async (req: Request, res: Response): Promi
   }
 });
 
-app.patch('/api/gadgets/:id/status', verifyToken, async (req: AuthenticatedRequest, res: Response): Promise<any> => {
+app.patch('/api/gadgets/:id/status', verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body; 
@@ -381,7 +377,7 @@ app.patch('/api/gadgets/:id/status', verifyToken, async (req: AuthenticatedReque
   }
 });
 
-app.get('/api/admin/pending-items', async (req: Request, res: Response) => {
+app.get('/api/admin/pending-items', async (req, res) => {
   try {
     const pendingItems = await Gadget.find({ status: 'pending' }).sort({ createdAt: -1 });
     res.json({ success: true, data: pendingItems });
@@ -390,7 +386,7 @@ app.get('/api/admin/pending-items', async (req: Request, res: Response) => {
   }
 });
 
-app.patch('/api/admin/approve-item/:id', async (req: Request, res: Response) => {
+app.patch('/api/admin/approve-item/:id', async (req, res) => {
   try {
     const { status } = req.body; 
     const updatedGadget = await Gadget.findByIdAndUpdate(req.params.id, { status }, { new: true });
@@ -401,7 +397,7 @@ app.patch('/api/admin/approve-item/:id', async (req: Request, res: Response) => 
 });
 
 // 🎯 রুট রাউট (Vercel 404 আটকাতে)
-app.get('/', (req: Request, res: Response) => {
+app.get('/', (req, res) => {
     res.send('🚀 GadgetLease API Backend with JWKS Verification is Live!');
 });
 
@@ -413,7 +409,6 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 export default app;
-
 // import express, { Express, Request, Response, NextFunction } from 'express';
 // import cors from 'cors';
 // import dotenv from 'dotenv';
