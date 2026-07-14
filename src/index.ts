@@ -89,6 +89,7 @@ app.get('/api/gadgets', async (req: Request, res: Response): Promise<any> => {
 
     // ১. ফিল্টারিং অবজেক্ট তৈরি (Query Object)
     const query: any = {};
+    query.status = 'approved';
 
     // 🔍 সার্চ ফিল্টার (নাম বা ডেসক্রিপশনে খুঁজবে)
     if (search) {
@@ -239,6 +240,77 @@ app.get('/api/bookings/user/:userId', async (req, res): Promise<any> => {
     res.status(500).json({ success: false, message: "Error fetching user bookings." });
   }
 });
+// 🌐 ফিক্সড করা এপিআই (আপনার আগের কোডটির পরিবর্তে এটি বসান)
+app.post('/api/items/add', verifyToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    console.log("📥 Incoming Payload:", req.body); // সার্ভার টার্মিনালে ডাটা চেক করার জন্য
+
+    const { title, category, pricePerDay, shortDescription, fullDescription, images, location, availableDate, userId } = req.body;
+
+    // ১. 🔒 সিকিউরিটি ও ভ্যালিডেশন চেক (বাধ্যতামূলক ফিল্ডগুলো আছে কিনা)
+    if (!userId || !title || !category || !pricePerDay || !shortDescription || !location) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "সবগুলো প্রয়োজনীয় ফিল্ড (Title, Price, Category, Location, Description) সঠিকভাবে পূরণ করুন।" 
+      });
+    }
+
+    // ২. 🎯 মঙ্গুজ স্কিমার সাথে মিল রেখে অবজেক্ট তৈরি
+    const newGadget = new Gadget({
+      title,
+      category,
+      pricePerDay: Number(pricePerDay),
+      shortDescription,
+      fullDescription: fullDescription || shortDescription, // ফুল ডেসক্রিপশন না থাকলে শর্টটাই বসে যাবে
+      images: images && images.length > 0 ? images : ['https://placehold.co/600x400'], // ডিফল্ট ইমেজ গ্যারান্টি
+      location,
+      availableDate: availableDate || new Date().toISOString().split('T')[0], // যদি ফ্রন্টএন্ড থেকে ডেট না আসে, আজকের ডেট বসে যাবে
+      rating: 5, // ডিফল্ট রেটিং
+      specifications: [], 
+      reviews: [], 
+      addedBy: userId,
+      status: 'pending' // 🔒 সরাসরি অ্যাডমিনের এপ্রুভালের জন্য পেন্ডিং স্টেটে যাবে
+    });
+
+    // ৩. ডাটাবেজে সেভ করা
+    await newGadget.save();
+    
+    return res.status(201).json({ 
+      success: true, 
+      message: "Product submitted successfully! Waiting for admin approval.", 
+      data: newGadget 
+    });
+
+  } catch (error: any) {
+    // 🔍 যদি কোনো কারণে আবারও ৫০০ এরর আসে, আপনার নোড বা এক্সপ্রেস টার্মিনালে এই নিচের কনসোলটি আসল কারণ বলে দেবে
+    console.error("❌ Mongoose Save Error Details:", error); 
+    return res.status(500).json({ 
+      success: false, 
+      message: "ডাটাবেজে প্রোডাক্ট সেভ করতে সমস্যা হয়েছে।", 
+      error: error.message 
+    });
+  }
+});
+
+
+app.get('/api/user/my-items', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.query;
+    const myItems = await Gadget.find({ addedBy: userId }).sort({ createdAt: -1 });
+    res.json({ success: true, data: myItems });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error fetching your items." });
+  }
+});
+
+app.delete('/api/gadgets/:id', verifyToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        await Gadget.findByIdAndDelete(req.params.id);
+        res.status(200).json({ success: true, message: "Deleted successfully" });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to delete" });
+    }
+});
 
 // ====================== Admin Routes ======================
 // 🌐 ফিক্সড করা এপিআই (আপনার আগের কোডটির পরিবর্তে এটি বসান)
@@ -321,6 +393,62 @@ app.post('/api/admin/gadgets', async (req: Request, res: Response): Promise<any>
   } catch (error) {
     console.error("Error creating gadget:", error);
     res.status(500).json({ success: false, message: "গ্যাজেটটি যুক্ত করতে সার্ভারে সমস্যা হয়েছে।" });
+  }
+});
+
+// 🎯 ব্যাকএন্ডে এই নতুন GET রাউটটি কপি-পেস্ট করুন
+app.get('/api/admin/pending-gadgets', async (req: Request, res: Response): Promise<any> => {
+  try {
+    // ডাটাবেজ থেকে শুধুমাত্র pending স্ট্যাটাসের গ্যাজেটগুলো খোঁজা হচ্ছে
+    const pendingGadgets = await Gadget.find({ status: 'pending' }).sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      message: "Pending gadgets fetched successfully",
+      data: pendingGadgets
+    });
+  } catch (error) {
+    console.error("Error fetching pending gadgets:", error);
+    res.status(500).json({ success: false, message: "সার্ভারে সমস্যা হয়েছে।" });
+  }
+});
+
+// ⚡ স্ট্যাটাস আপডেট করার ব্যাকএন্ড রাউট
+app.patch('/api/gadgets/:id/status', verifyToken, async (req: AuthenticatedRequest, res: Response): Promise<any> => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body; // approved বা rejected
+
+    const updatedGadget = await Gadget.findByIdAndUpdate(id, { status }, { new: true });
+
+    res.status(200).json({
+      success: true,
+      message: `Gadget status updated to ${status}`,
+      data: updatedGadget
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to update status" });
+  }
+});
+
+// ক) অ্যাডমিনের জন্য সব পেন্ডিং প্রোডাক্ট গেট করা
+app.get('/api/admin/pending-items', async (req: Request, res: Response) => {
+  try {
+    const pendingItems = await Gadget.find({ status: 'pending' }).sort({ createdAt: -1 });
+    res.json({ success: true, data: pendingItems });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error fetching pending items." });
+  }
+});
+
+// খ) অ্যাডমিন দ্বারা প্রোডাক্ট স্ট্যাটাস পরিবর্তন (Approve/Reject) করা
+app.patch('/api/admin/approve-item/:id', async (req: Request, res: Response) => {
+  try {
+    const { status } = req.body; // 'approved' অথবা 'rejected' আসবে
+    const updatedGadget = await Gadget.findByIdAndUpdate(req.params.id, { status }, { new: true });
+    res.json({ success: true, message: `Product ${status} successfully!`, data: updatedGadget });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Action failed." });
   }
 });
 
