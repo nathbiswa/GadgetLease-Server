@@ -14,7 +14,7 @@ const MONGODB_URI = process.env.MONGODB_URI;
 
 // Middleware
 app.use(cors({
-  origin: "http://localhost:3000", // আপনার Next.js ফ্রন্টএন্ড ইউআরএল
+  origin: process.env.CLIENT_URL, // আপনার Next.js ফ্রন্টএন্ড ইউআরএল
   credentials: true
 }));
 app.use(express.json());
