@@ -4,7 +4,6 @@ import dotenv from 'dotenv';
 import mongoose, { Types } from 'mongoose'; 
 import Gadget from './models/Gadget';
 import Booking from './models/Booking';
-import { createRemoteJWKSet, jwtVerify } from 'jose-cjs';
 
 dotenv.config();
 
@@ -34,9 +33,6 @@ mongoose.connect(MONGODB_URI)
 // ==========================================
 
 const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
-const JWKS = createRemoteJWKSet(
-  new URL(`${clientUrl.replace(/\/$/, '')}/api/auth/jwks`)
-);
 
 interface AuthenticatedRequest extends Request {
   user?: any;
@@ -52,6 +48,15 @@ const verifyToken = async (req: AuthenticatedRequest, res: Response, next: NextF
   const token = authHeader.split(' ')[1];
 
   try {
+    // 1️⃣ ফাংশনের ভেতরে ডাইনামিক ইমপোর্ট করা হলো (টাইপস্ক্রিপ্ট এরর bypass করার জন্য)
+    const { createRemoteJWKSet, jwtVerify } = await import('jose');
+
+    // 2️⃣ JWKS তৈরির লজিকটি ফাংশনের ভেতরে নিয়ে আসা হলো
+    const JWKS = createRemoteJWKSet(
+      new URL(`${clientUrl.replace(/\/$/, '')}/api/auth/jwks`)
+    );
+
+    // 3️⃣ টোকেন ভেরিফাই করা হলো
     const { payload } = await jwtVerify(token, JWKS);
     req.user = payload; 
     console.log("👤 Authenticated User Payload:", payload);
@@ -61,6 +66,35 @@ const verifyToken = async (req: AuthenticatedRequest, res: Response, next: NextF
     return res.status(401).json({ message: "Unauthorized: Invalid or expired token" });
   }
 };
+
+// const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+// const JWKS = createRemoteJWKSet(
+//   new URL(`${clientUrl.replace(/\/$/, '')}/api/auth/jwks`)
+// );
+
+// interface AuthenticatedRequest extends Request {
+//   user?: any;
+// }
+
+// const verifyToken = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<any> => {
+//   const authHeader = req.headers.authorization;
+  
+//   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+//     return res.status(401).json({ message: "Unauthorized: No token provided" });
+//   }
+
+//   const token = authHeader.split(' ')[1];
+
+//   try {
+//     const { payload } = await jwtVerify(token, JWKS);
+//     req.user = payload; 
+//     console.log("👤 Authenticated User Payload:", payload);
+//     next();
+//   } catch (error) {
+//     console.error("JWT Verification Error:", error);
+//     return res.status(401).json({ message: "Unauthorized: Invalid or expired token" });
+//   }
+// };
 
 
 // ==========================================
