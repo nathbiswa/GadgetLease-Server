@@ -406,12 +406,9 @@ app.get('/', (req: Request, res: Response) => {
     res.send('🚀 GadgetLease TypeScript API Backend is Live!');
 });
 
-// 🎯 কন্ডিশনাল পোর্ট লিসেন (Vercel-এর ক্র্যাশ এড়াতে)
-if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => {
-      console.log(`⚡ [server]: Server is listening on port ${PORT}`);
-  });
-}
+app.listen(PORT, () => {
+    console.log(`⚡ [server]: Server is listening on port ${PORT}`);
+});
 
 export default app;
 // import express, { Express, Request, Response, NextFunction } from 'express';
