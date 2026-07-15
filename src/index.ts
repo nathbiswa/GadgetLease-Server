@@ -1,10 +1,10 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import mongoose, { Types } from 'mongoose'; // ➔ Types সঠিকভাবে ইম্পোর্ট করা হলো
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import mongoose, { Types } from 'mongoose'; 
 import Gadget from './models/Gadget';
 import Booking from './models/Booking';
+import { createRemoteJWKSet, jwtVerify } from 'jose-cjs';
 
 dotenv.config();
 
